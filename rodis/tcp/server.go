@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -54,17 +55,46 @@ func (this *Server) process(conn net.Conn) {
 			log.Println("unknown op", op)
 		}
 
+		if e != nil {
+			log.Println("close connection")
+			return
+		}
 	}
 }
 
 func (this *Server) set(conn net.Conn, r *bufio.Reader) error {
-	return nil
+	key, value, err := readKeyAndValue(r, conn)
+	if err != nil {
+		return err
+	}
+	return sendResponse(nil, this.Set(key, value), conn)
 }
 
 func (this *Server) get(conn net.Conn, r *bufio.Reader) error {
-	return nil
+	key, err := readKey(r)
+	if err != nil {
+		return err
+	}
+
+	value, err := this.Get(key)
+	return sendResponse(value, err, conn)
 }
 
 func (this *Server) del(conn net.Conn, r *bufio.Reader) error {
-	return nil
+	key, err := readKey(r)
+	if err != nil {
+		return err
+	}
+	return sendResponse(nil, this.Del(key), conn)
+}
+
+func sendResponse(value []byte, err error, conn net.Conn) error {
+	if err != nil {
+		tmp := fmt.Sprintf("-%d ", len(err.Error())) + err.Error()
+		_, e := conn.Write([]byte(tmp))
+		return e
+	}
+	tmp := fmt.Sprintf("%d ", len(value))
+	_, e := conn.Write(append([]byte(tmp), value...))
+	return e
 }

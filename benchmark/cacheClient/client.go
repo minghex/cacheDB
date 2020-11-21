@@ -21,5 +21,9 @@ func New(typ, addr string) Client {
 		return newRedisClient(addr)
 	}
 
+	if typ == "tcp" {
+		return newTcpClient(addr)
+	}
+
 	panic(typ)
 }
