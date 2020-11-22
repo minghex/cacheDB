@@ -34,8 +34,11 @@ func (this *Server) Serve() {
 }
 
 func (this *Server) process(conn net.Conn) {
-	defer conn.Close()
 	r := bufio.NewReader(conn)
+	resultChan := make(chan chan *result, 0)
+	defer close(resultChan)
+	go this.reply(conn, resultChan)
+
 	for {
 		op, e := r.ReadByte()
 		if e != nil {
@@ -46,11 +49,11 @@ func (this *Server) process(conn net.Conn) {
 		}
 
 		if op == 'S' {
-			e = this.set(conn, r)
+			this.set(resultChan, r)
 		} else if op == 'G' {
-			e = this.get(conn, r)
+			this.get(resultChan, r)
 		} else if op == 'D' {
-			e = this.del(conn, r)
+			this.del(resultChan, r)
 		} else {
 			log.Println("unknown op", op)
 		}
@@ -62,30 +65,64 @@ func (this *Server) process(conn net.Conn) {
 	}
 }
 
-func (this *Server) set(conn net.Conn, r *bufio.Reader) error {
-	key, value, err := readKeyAndValue(r, conn)
-	if err != nil {
-		return err
+func (this *Server) reply(conn net.Conn, resultCh chan chan *result) {
+	defer conn.Close()
+	for {
+		c, open := <-resultCh
+		if !open {
+			return
+		}
+
+		r := <-c
+		e := sendResponse(r.value, r.err, conn)
+		if e != nil {
+			log.Println("sendResponse error: ", e)
+			return
+		}
 	}
-	return sendResponse(nil, this.Set(key, value), conn)
 }
 
-func (this *Server) get(conn net.Conn, r *bufio.Reader) error {
-	key, err := readKey(r)
+func (this *Server) set(resultCh chan chan *result, r *bufio.Reader) {
+	ch := make(chan *result)
+	resultCh <- ch
+
+	key, value, err := readKeyAndValue(r)
 	if err != nil {
-		return err
+		ch <- &result{nil, err}
+		return
 	}
 
-	value, err := this.Get(key)
-	return sendResponse(value, err, conn)
+	go func() {
+		ch <- &result{nil, this.Set(key, value)}
+	}()
 }
 
-func (this *Server) del(conn net.Conn, r *bufio.Reader) error {
+func (this *Server) get(resultCh chan chan *result, r *bufio.Reader) {
+	ch := make(chan *result)
+	resultCh <- ch
+
 	key, err := readKey(r)
 	if err != nil {
-		return err
+		ch <- &result{nil, err}
+		return
 	}
-	return sendResponse(nil, this.Del(key), conn)
+
+	go func() {
+		v, e := this.Get(key)
+		ch <- &result{v, e}
+	}()
+}
+
+func (this *Server) del(resultCh chan chan *result, r *bufio.Reader) {
+	ch := make(chan *result)
+	resultCh <- ch
+	key, err := readKey(r)
+	if err != nil {
+		ch <- &result{nil, err}
+	}
+	go func() {
+		ch <- &result{nil, this.Del(key)}
+	}()
 }
 
 func sendResponse(value []byte, err error, conn net.Conn) error {

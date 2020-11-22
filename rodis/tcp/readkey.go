@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"net"
 )
 
 func readKey(r *bufio.Reader) (string, error) {
@@ -22,7 +21,7 @@ func readKey(r *bufio.Reader) (string, error) {
 	return string(buff), nil
 }
 
-func readKeyAndValue(r *bufio.Reader, conn net.Conn) (string, []byte, error) {
+func readKeyAndValue(r *bufio.Reader) (string, []byte, error) {
 	klen, e := readLen(r)
 	if e != nil {
 		return "", nil, fmt.Errorf("read key length error")
