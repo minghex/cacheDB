@@ -100,4 +100,8 @@ func (this *tcpClient) PipelineRun(cmds []*Cmd) {
 			this.del(c.Key)
 		}
 	}
+
+	for i := 0; i < len(cmds); i++ {
+		cmds[i].Value, cmds[i].Error = this.recvResponse()
+	}
 }
